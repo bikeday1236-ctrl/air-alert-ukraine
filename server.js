@@ -3,7 +3,7 @@ import Database from 'better-sqlite3';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { startTelegram, hotRegions, queryReports } from './telegram.js';
+import { startTelegram, hotRegions, queryReports, tgStatusFor, tgState } from './telegram.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
@@ -136,13 +136,24 @@ async function poll() {
 
 function view() {
   const s = SOURCES.alerts_in_ua;
-  const fresh = s.last_success && Date.now() - Date.parse(s.last_success) < STALE_MS;
+  const apiFresh = s.last_success && Date.now() - Date.parse(s.last_success) < STALE_MS;
+  const tgOk = Object.values(SOURCES).some(x => x.id.startsWith('tg_') && x.reliability === 'official' && x.ok);
   const hourAgo = new Date(Date.now() - 3600000).toISOString();
   const recent = db.prepare('select count(*) c from history where fetched_at > ?').get(hourAgo).c;
+  const list = [...regions.values()].map(r => {
+    const t = tgStatusFor(r.key);
+    // Офіційний канал новіший за API (або API мертвий) — беремо його статус
+    if (t && (!apiFresh || Date.parse(t.at) >= Date.parse(r.fetchedAt || 0))) {
+      return { ...r, status: t.status, changedAt: r.status === t.status ? r.changedAt : t.at,
+        publishedAt: t.at, fetchedAt: new Date().toISOString(), via: 'telegram', lastKnown: t.status, tgPost: t.post };
+    }
+    const status = apiFresh ? r.status : (tgOk ? 'none' : 'unknown');
+    return { ...r, status, lastKnown: r.status, via: apiFresh ? 'api' : null };
+  });
   return {
-    serverTime: new Date().toISOString(), stale: !fresh, recent, hot: hotRegions(db),
+    serverTime: new Date().toISOString(), stale: !(apiFresh || tgOk), recent, hot: hotRegions(db),
     sources: Object.values(SOURCES).map(({ api, ...x }) => x),
-    regions: [...regions.values()].map(r => ({ ...r, lastKnown: r.status, status: fresh ? r.status : 'unknown' }))
+    regions: list
   };
 }
 
