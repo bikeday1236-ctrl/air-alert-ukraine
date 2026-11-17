@@ -3,6 +3,7 @@ import Database from 'better-sqlite3';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { startTelegram, hotRegions, queryReports } from './telegram.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
@@ -139,7 +140,7 @@ function view() {
   const hourAgo = new Date(Date.now() - 3600000).toISOString();
   const recent = db.prepare('select count(*) c from history where fetched_at > ?').get(hourAgo).c;
   return {
-    serverTime: new Date().toISOString(), stale: !fresh, recent,
+    serverTime: new Date().toISOString(), stale: !fresh, recent, hot: hotRegions(db),
     sources: Object.values(SOURCES).map(({ api, ...x }) => x),
     regions: [...regions.values()].map(r => ({ ...r, lastKnown: r.status, status: fresh ? r.status : 'unknown' }))
   };
@@ -159,6 +160,7 @@ app.get('/api/history', (req, res) => {
     : db.prepare('select * from history order by published_at desc limit ?').all(lim);
   res.json(rows);
 });
+app.get('/api/reports', (req, res) => res.json(queryReports(db, req.query.region, req.query.limit)));
 app.get('/api/stream', (req, res) => {
   res.set({ 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
   res.flushHeaders();
@@ -171,4 +173,5 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 await loadGeo();
 poll(); setInterval(poll, POLL_MS);
+startTelegram({ db, SOURCES, ensure, broadcast });
 app.listen(PORT, () => console.log(`Air Alert Ukraine: http://localhost:${PORT}`));
