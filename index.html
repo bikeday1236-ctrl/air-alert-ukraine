@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#14171c">
+<title>Air Alert Ukraine</title>
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/icon.svg">
+<link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header>
+  <div class="top"><b>Тривоги</b><span id="clock">—</span>
+    <nav><button id="bHist" aria-label="Історія">Історія</button><button id="bSrc" aria-label="Джерела">Джерела</button><button id="bSet" aria-label="Налаштування">Налаштування</button></nav></div>
+  <div class="stats">
+    <div class="st"><b id="sAlert">–</b>з тривогою</div>
+    <div class="st"><b id="sNone">–</b>без тривоги</div>
+    <div class="st"><b id="sNew">–</b>подій за годину</div>
+    <div class="st"><b id="sBad">–</b>джерел недоступно</div>
+  </div>
+  <div id="banner" hidden></div>
+</header>
+<div id="map"></div>
+<div class="legend">
+  <i style="--c:#d93025"></i>тривога <i style="--c:#3b4252"></i>не оголошено <i style="--c:#e0a800"></i>потребує перевірки <i style="--c:#2e9e5b"></i>відбій
+</div>
+<section id="sheet" aria-live="polite"></section>
+<section id="panel" hidden></section>
+<script src="/vendor/leaflet/leaflet.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>
