@@ -24,9 +24,11 @@ fetch('/api/geojson').then(r => { if (!r.ok) throw 0; return r.json(); }).then(g
 }).catch(() => banner('Немає меж областей: поклади data/oblasts.geojson і перезапусти сервер.'));
 
 function style(k) {
-  const st = byKey[k]?.status || 'unknown';
-  return { fillColor: COLOR[st], fillOpacity: .78, color: '#14171c', weight: k === selected ? 3 : 1 };
+  const st = byKey[k]?.status || 'unknown', hot = state?.hot?.[k];
+  return { fillColor: COLOR[st], fillOpacity: .78, color: hot ? '#ffd666' : '#14171c', weight: k === selected ? 3 : hot ? 3 : 1, dashArray: hot ? '6 4' : null };
 }
+const KIND = { drone: 'БпЛА', missile: 'Ракети', alert: 'Тривога', clear: 'Відбій' };
+const repHtml = x => `<div class="item"><b>${KIND[x.kind]}</b> · ${x.official ? 'офіційний канал' : 'непідтверджено'}<small>@${esc(x.channel)} · опубліковано ${tm(x.published_at)} · отримано ${tm(x.fetched_at)}</small>${esc(x.text.slice(0, 220))}${x.text.length > 220 ? '…' : ''} <a href="${esc(x.url)}" target="_blank" rel="noopener">першоджерело</a></div>`;
 function banner(t) { const b = $('#banner'); b.hidden = !t; b.textContent = t || ''; }
 
 function render() {
@@ -50,6 +52,7 @@ async function openCard(k, keep) {
   layer?.setStyle(f => style(f.properties.key));
   const src = state.sources[0];
   const hist = await fetch('/api/history?limit=5&region=' + encodeURIComponent(k)).then(x => x.json()).catch(() => []);
+  const reps = await fetch('/api/reports?limit=5&region=' + encodeURIComponent(k)).then(x => x.json()).catch(() => []);
   const stale = r.status === 'unknown';
   $('#sheet').innerHTML = `
     <button class="x" id="cx" aria-label="Закрити">✕</button>
@@ -64,6 +67,7 @@ async function openCard(k, keep) {
     <div class="row"><span>Підтвердження</span><span>${REL[src.reliability]}</span></div>
     <div class="row"><span>Джерело</span><span><a href="${esc(src.url)}" target="_blank" rel="noopener">${esc(src.name)}</a></span></div>
     ${r.items?.length ? `<div class="row"><span>Райони/громади</span><span>${r.items.map(i => esc(i.title)).join(', ')}</span></div>` : ''}
+    ${reps.length ? '<p class="muted">Повідомлення з Telegram (не підтверджено офіційно)</p>' + reps.map(repHtml).join('') : ''}
     ${hist.length ? '<p class="muted">Історія області</p>' + hist.map(h => `<div class="item">${STATUS[h.status]}<small>${tm(h.published_at)}</small></div>`).join('') : ''}`;
   $('#sheet').classList.add('open');
   $('#cx').onclick = () => { selected = null; $('#sheet').classList.remove('open'); layer?.setStyle(f => style(f.properties.key)); };
@@ -132,3 +136,12 @@ $('#bSet').onclick = () => {
   document.querySelectorAll('.cr').forEach(c => c.onchange = () => { cfg.regions = [...document.querySelectorAll('.cr:checked')].map(x => x.value); save(); });
 };
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
+
+// ---- Стрічка Telegram ----
+async function openFeed() {
+  const r = await fetch('/api/reports?limit=60').then(x => x.json()).catch(() => []);
+  panel('Стрічка Telegram', '<p class="muted">Автоматичний збір із публічних каналів. Області розпізнаються за текстом і можуть бути неточними. Це не офіційне підтвердження.</p>' + (r.length ? r.map(repHtml).join('') : '<p class="muted">Повідомлень поки немає.</p>'));
+}
+const fb = document.createElement('button'); fb.textContent = 'Стрічка'; fb.onclick = openFeed; document.querySelector('nav').prepend(fb);
+const sty = document.createElement('style'); sty.textContent = '.top{flex-wrap:wrap}nav button{padding:5px 8px;font-size:13px}'; document.head.append(sty);
+document.querySelector('.legend').insertAdjacentHTML('beforeend', ' <i style="--c:transparent;border:2px dashed #ffd666"></i>є непідтверджені повідомлення');
