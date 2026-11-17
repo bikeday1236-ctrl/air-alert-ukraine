@@ -5,6 +5,16 @@ const EXTRA = (process.env.TG_CHANNELS || '').split(',').map(clean).filter(Boole
 const OFFICIAL = new Set((process.env.TG_OFFICIAL || 'kpszsu').split(',').map(clean));
 const CHANNELS = [...new Set([...OFFICIAL, ...EXTRA])];
 const MAX_AGE = 3 * 3600000, HOT_MS = 30 * 60000;
+// Статус з ОФІЦІЙНОГО каналу: тривога діє 30 хв без нового повідомлення, відбій — 15 хв
+const TG_ALERT_TTL = 30 * 60000, TG_CLEAR_TTL = 15 * 60000;
+export const tgState = new Map(); // key -> { status: 'alert'|'clear', at: ISO }
+export function tgStatusFor(key) {
+  const t = tgState.get(key); if (!t) return null;
+  const age = Date.now() - Date.parse(t.at);
+  if (t.status === 'alert' && age < TG_ALERT_TTL) return t;
+  if (t.status === 'clear' && age < TG_CLEAR_TTL) return t;
+  return null;
+}
 
 const NL = '(?<![а-яіїєґ])', NR = '(?![а-яіїєґ])';
 const REGIONS = [
@@ -85,6 +95,15 @@ export function startTelegram({ db, SOURCES, ensure, broadcast, pollMs = 45000 }
         if (!k) continue;
         const regs = findRegions(low).map(n => ensure(n).key);
         ins.run(ch, m.post, m.published, now, m.text, k, JSON.stringify(regs), 'https://t.me/' + m.post, OFFICIAL.has(ch) ? 1 : 0);
+        // Тільки офіційний канал і тільки коли названо конкретні області
+        if (OFFICIAL.has(ch) && regs.length && (k === 'drone' || k === 'missile' || k === 'alert' || k === 'clear')) {
+          for (const key of regs) {
+            const prev = tgState.get(key);
+            if (prev && Date.parse(prev.at) >= Date.parse(m.published)) continue; // старіше за вже відоме
+            const status = k === 'clear' ? 'clear' : 'alert';
+            tgState.set(key, { status, at: m.published, kind: k, post: 'https://t.me/' + m.post });
+          }
+        }
       }
       s.last_success = now; s.ok = true; s.last_error = null;
     } catch (e) { s.ok = false; s.last_error = `${e.message} (${now})`; }
